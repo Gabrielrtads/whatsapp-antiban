@@ -1,0 +1,130 @@
+{
+  "name": "WhatsApp Anti-Ban Pipeline Template",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-webhook",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Inbound",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate Reading Latency\nconst text = $json.body?.message?.conversation || $json.body?.text || \"\";\nconst words = text.split(/\\s+/).filter(Boolean).length;\nconst delay = Math.min(Math.max(800 + (words * 220), 1200), 4000);\nreturn { read_delay_ms: delay };"
+      },
+      "id": "2",
+      "name": "Calculate Reading Delay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.read_delay_ms }}",
+        "unit": "milliseconds"
+      },
+      "id": "3",
+      "name": "Wait (Reading)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [640, 300],
+      "webhookId": "wait-reading"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://your-gateway:8080/chat/markRead/your-instance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"readMessages\": [\n    {\n      \"id\": \"{{ $('Webhook Inbound').item.json.body.key.id }}\",\n      \"fromMe\": false,\n      \"remoteJid\": \"{{ $('Webhook Inbound').item.json.body.key.remoteJid }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "4",
+      "name": "Mark As Read",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://your-gateway:8080/chat/sendPresence/your-instance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $('Webhook Inbound').item.json.body.key.remoteJid }}\",\n  \"presence\": \"composing\"\n}",
+        "options": {}
+      },
+      "id": "5",
+      "name": "Send Presence (Composing)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate Dynamic Typing Delay\nconst text = $json.ai_response || \"Hello! How can I help you today?\";\nconst base = text.length * 35;\nconst jitter = 0.85 + (Math.random() * 0.30);\nconst finalDelay = Math.min(Math.max(Math.round(base * jitter), 1800), 8500);\nreturn { typing_delay_ms: finalDelay, reply_text: text };"
+      },
+      "id": "6",
+      "name": "Calculate Typing Delay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.typing_delay_ms }}",
+        "unit": "milliseconds"
+      },
+      "id": "7",
+      "name": "Wait (Typing)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1520, 300],
+      "webhookId": "wait-typing"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://your-gateway:8080/message/sendText/your-instance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $('Webhook Inbound').item.json.body.key.remoteJid }}\",\n  \"text\": \"{{ $json.reply_text }}\"\n}",
+        "options": {}
+      },
+      "id": "8",
+      "name": "Send Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Inbound": {
+      "main": [[{ "node": "Calculate Reading Delay", "type": "main", "index": 0 }]]
+    },
+    "Calculate Reading Delay": {
+      "main": [[{ "node": "Wait (Reading)", "type": "main", "index": 0 }]]
+    },
+    "Wait (Reading)": {
+      "main": [[{ "node": "Mark As Read", "type": "main", "index": 0 }]]
+    },
+    "Mark As Read": {
+      "main": [[{ "node": "Send Presence (Composing)", "type": "main", "index": 0 }]]
+    },
+    "Send Presence (Composing)": {
+      "main": [[{ "node": "Calculate Typing Delay", "type": "main", "index": 0 }]]
+    },
+    "Calculate Typing Delay": {
+      "main": [[{ "node": "Wait (Typing)", "type": "main", "index": 0 }]]
+    },
+    "Wait (Typing)": {
+      "main": [[{ "node": "Send Message", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {}
+}
