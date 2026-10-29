@@ -5,21 +5,37 @@
 [![Zero-Dependency](https://img.shields.io/badge/Dependencies-Zero-emerald?style=for-the-badge)](#)
 [![Gateway](https://img.shields.io/badge/Gateways-Evolution_API_|_Z--API_|_Baileys_|_Meta_Cloud-orange?style=for-the-badge)](#)
 
-> **Stop losing WhatsApp numbers to instant bans in N8N and AI automations.**  
-> A production-grade human behavior simulation protocol that introduces **jittered typing delays**, **delayed blue checkmarks (`markRead`)**, **presence states (`composing` / `recording`)**, and a **30-day chip warm-up ramp**.
+> A messaging cadence example for consent-based WhatsApp automations, with typing delays, read receipts and presence states. Timing and content variation do not guarantee protection against account restrictions.
+
+## Uso Legítimo
+
+- Exija opt-in documentado do destinatário, com data, origem e finalidade autorizada, antes de enviar mensagens. É proibido usar este material para contatar quem não consentiu, inclusive listas compradas, spam ou phishing.
+- Implemente opt-out funcional e fácil (por exemplo, “SAIR”): registre a revogação e bloqueie novos envios antes de qualquer automação. Uma mensagem recebida não autoriza campanhas futuras.
+- Cumpra a LGPD e os Termos do WhatsApp aplicáveis, incluindo finalidade, minimização, retenção e proteção dos dados. Cadência, spintax e limites de volume não substituem essas obrigações nem autorizam contornar controles da plataforma.
+- O template não implementa cadastro de consentimento nem lista de bloqueio: integre essas verificações antes das ações de leitura, presença e envio, antes de usar em produção.
+
+## Webhook: configuração obrigatória antes de produção
+
+O arquivo `examples/n8n-workflow-template.json` exige **Header Auth** no nó `Webhook Inbound`. Crie e selecione uma credencial **Header Auth** no cofre do n8n, com nome de header dedicado (por exemplo, `X-Webhook-Token`) e segredo aleatório forte; configure o mesmo header somente no gateway confiável. Use HTTPS. Nunca coloque o segredo no JSON, na URL, no Git ou em logs. Sem credencial válida o webhook deve rejeitar a requisição; não altere a autenticação para `None`. Antes de ativar, confirme que chamadas sem header ou com valor incorreto são rejeitadas e não executam nenhum nó posterior.
+
+O filtro aceita somente o envelope plano `{ event: "messages.upsert", messageType: "conversation", key: { id, fromMe: false, remoteJid }, message: { conversation: "texto" } }`, ou `messageType: "extendedTextMessage"` com `message.extendedTextMessage.text`. Somente JIDs telefônicos diretos (`5–15 dígitos@s.whatsapp.net`) são aceitos; grupos, status, outros eventos e formatos ausentes/malformados são descartados. Gateways com `body.data`, arrays ou JIDs alternativos precisam de adaptação e testes explícitos antes do uso; o exemplo não aceita esses formatos automaticamente.
+
+O nó `Deduplicate Messages` requer n8n **1.64.0 ou posterior** e mantém os últimos **10.000 pares destinatário/ID** entre execuções, antes de qualquer efeito externo. Use um workflow por instância do gateway. IDs removidos do histórico podem voltar a ser processados. Antes de produção, valide persistência após reinício e reentregas simultâneas na sua instalação; se precisar de garantia sob concorrência, use uma reserva atômica persistente de IDs. Uma falha posterior pode deixar o ID registrado sem envio: não repita automaticamente um envio de resultado incerto.
+
+Validação local: `node scripts/test_runner.mjs` (testes de atraso e regressão do template; não substituem a importação e os testes HTTP numa instância n8n).
 
 ---
 
-## ⚡ The Problem: Why Automation Chips Get Banned
+## ⚡ Messaging Experience
 
-WhatsApp's automated anti-abuse algorithms flag accounts not by what they say, but **how they behave**:
+Instant automated actions can create a confusing messaging experience:
 
 ```
-❌ THE ROBOTIC PATTERN (BANNED IN 48H)
+EXAMPLE OF INSTANT AUTOMATED ACTIONS
 [Message Received] ──(0.01s)──> [Read / Blue Ticks] ──(0.1s)──> [Sends 500-char reply instantly]
 ```
 
-When an account sends instant replies with no typing duration, marks messages as read in 10 milliseconds, or sends identical message hashes to dozens of contacts, **WhatsApp flags the session as an unauthorized bot**.
+Delays and presence states can improve pacing. They do not establish consent, platform compliance or account safety.
 
 ---
 
@@ -93,7 +109,7 @@ return {
 
 ## 📅 The 30-Day SIM Card Warm-Up Schedule
 
-Never hook a brand new chip straight into high-volume automations. Follow this schedule to build domain trust with WhatsApp:
+This illustrative ramp is not a safe-volume allowance or a way to gain platform trust. Every phase requires documented opt-in, working opt-out and compliance with the platform's applicable limits; lower limits take precedence.
 
 | Phase | Timeline | Volume Cap | Permitted Behavior |
 |---|---|---|---|
@@ -115,11 +131,11 @@ Never hook a brand new chip straight into high-volume automations. Follow this s
 
 ---
 
-## 🛡️ Anti-Fingerprint Golden Rules
+## 🛡️ Messaging Experience Rules
 
 1. **Disable Auto-Read:** In your gateway dashboard, always disable automatic read receipts. Blue ticks must be triggered by your workflow after a realistic reading pause.
 2. **Audio Presence:** If your AI sends voice notes (TTS), always set presence to `'recording'`, never `'composing'`.
-3. **Use Spintax:** Never send identical text strings to multiple recipients simultaneously. Rotate greetings, sentence structures, and closings.
+3. **Content variation for naturalness:** Optionally vary greetings and closings to fit the conversation. Spintax must not be used to evade detection filters or contact people without consent.
 4. **Isolate Numbers:** Never use your primary customer support number for mass outbound campaigns.
 
 ---

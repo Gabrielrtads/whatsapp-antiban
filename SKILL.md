@@ -1,23 +1,32 @@
 ---
 name: whatsapp-antiban
 version: 1.0.0
-description: "Human behavior simulation & ban prevention protocol for WhatsApp automations (N8N, Meta Cloud API, Evolution API, Baileys, Z-API). Dynamic typing pace, delayed read receipts, Gaussian jitter, and chip warm-up schedules."
+description: "Messaging cadence examples for consent-based WhatsApp automations (N8N, Meta Cloud API, Evolution API, Baileys, Z-API). Typing pace, delayed read receipts and presence states; no guarantee against account restrictions."
 category: automation
-tags: [whatsapp, n8n, antiban, automation, evolution-api, baileys, stealth, ai-agents]
+tags: [whatsapp, n8n, antiban, automation, evolution-api, baileys, ai-agents]
 ---
 
 # 🛡️ WhatsApp Anti-Ban Protocol (`whatsapp-antiban`)
 
-A battle-tested protocol designed for AI agents and automation developers to eliminate ban risks on WhatsApp when operating through **N8N**, **Evolution API**, **Z-API**, **Baileys**, or **Meta Cloud API**.
+A messaging cadence example for consent-based automations using **N8N**, **Evolution API**, **Z-API**, **Baileys**, or **Meta Cloud API**. Delays and content variation do not eliminate account restriction risks.
 
 > [!IMPORTANT]
-> **Why Bots Get Banned:**  
-> WhatsApp's spam detection algorithms look for unnatural behavioral signatures:
-> 1. **Zero latency reading:** Blue ticks appearing 10ms after message delivery.
-> 2. **Superhuman typing:** Sending a 400-character paragraph in 0.2 seconds without a `composing` state.
-> 3. **Fixed timing intervals:** Exactly 3.000s delay on every message (robotic flat timing).
-> 4. **Identical message hashes:** Sending the exact same string to multiple recipients.
-> 5. **Cold chip spikes:** Going from 0 to 200 messages/day on a freshly activated SIM card.
+> Timing, presence and volume examples describe messaging experience, not verified detection signatures or methods for bypassing platform controls.
+
+## Uso Legítimo
+
+- Exija opt-in documentado de cada destinatário (data, origem e finalidade autorizada) antes de enviar mensagens. É proibido contatar quem não consentiu, usar listas compradas, enviar spam ou phishing.
+- Implemente opt-out funcional e fácil, como “SAIR”; registre a revogação e bloqueie novos envios antes de qualquer automação. Uma conversa recebida não autoriza campanhas futuras.
+- Cumpra a LGPD e os Termos do WhatsApp aplicáveis: finalidade, minimização, retenção e proteção dos dados. Spintax, atrasos e volumes não autorizam contornar controles da plataforma.
+- O exemplo não implementa cadastro de consentimento ou lista de bloqueio. Integre essas verificações antes de leitura, presença e envio, antes de produção.
+
+## Webhook autenticado obrigatório
+
+Antes de produção, configure **Header Auth** no `Webhook Inbound` do template e selecione uma credencial do cofre do n8n com header dedicado (por exemplo, `X-Webhook-Token`) e segredo aleatório forte. Configure o mesmo header no gateway confiável e use HTTPS. Nunca grave o segredo no template, em URL, Git ou logs; nunca desative a autenticação. Teste que headers ausentes/incorretos são rejeitados sem executar nós posteriores.
+
+O filtro aceita apenas envelope plano `body.event = "messages.upsert"`, `body.key.fromMe === false`, ID de mensagem não vazio, JID direto (`5–15 dígitos@s.whatsapp.net`) e texto em `body.message.conversation` com `messageType = "conversation"`, ou `body.message.extendedTextMessage.text` com `messageType = "extendedTextMessage"`. Descarta grupos, status, outros eventos e dados inválidos antes das ações externas. Outros envelopes, como `body.data`, arrays e JIDs alternativos, precisam de adaptação e testes explícitos.
+
+O nó nativo `Deduplicate Messages` requer n8n **1.64.0+** e guarda os últimos **10.000 pares destinatário/ID** entre execuções. Use um workflow por instância do gateway. Histórico limitado não garante entrega única; valide persistência após reinício e reentregas simultâneas antes de produção. Para garantia sob concorrência, use reserva atômica persistente de IDs. Falhas posteriores podem deixar um ID registrado sem envio: não repita automaticamente envios de resultado incerto. Execute `node scripts/test_runner.mjs` localmente; importação e HTTP reais no n8n continuam necessários.
 
 ---
 
@@ -121,7 +130,7 @@ return {
 
 ## 📅 4. The 30-Day SIM Card Warm-up Schedule (Ramp-Up Protocol)
 
-Fresh SIM cards or accounts reactivated after being offline **must never start on full automation volume**. Follow this strict schedule:
+This illustrative schedule does not establish safe volumes or platform trust. Every phase requires documented opt-in, working opt-out and compliance with applicable platform limits; lower limits take precedence.
 
 | Phase | Timeline | Volume Cap | Permitted Behavior |
 |---|---|---|---|
@@ -134,7 +143,7 @@ Fresh SIM cards or accounts reactivated after being offline **must never start o
 
 ## 🔀 5. Content Spintax & Variation Rules
 
-Sending the exact same string to multiple recipients triggers automated hash-matching spam filters.
+Use content variation for naturalness and relevance within an authorized conversation. Do not use spintax to evade detection filters or to contact recipients without consent.
 
 ### Golden Rules:
 1. **Dynamic Greetings:** Rotate randomly between `"Olá"`, `"Oi"`, `"Tudo bem?"`, `"Como vai?"`, `"Opa"`.
@@ -143,7 +152,7 @@ Sending the exact same string to multiple recipients triggers automated hash-mat
    ```
    {Olá|Oi|Como vai}, {tudo bem?|como você está?} Vi que você {solicitou|pediu|se interessou pelo} agendamento.
    ```
-4. **Personalization Anchor:** Always inject the recipient's first name (`{{ $json.first_name }}`) to guarantee distinct sha256 message hashes.
+4. **Relevant Personalization:** Use the recipient's first name only when appropriate and authorized; preserve the meaning and purpose of the message.
 
 ---
 
@@ -179,7 +188,7 @@ Sending the exact same string to multiple recipients triggers automated hash-mat
 
 ## 🛑 7. Red Lines (Never Do This)
 
-1. **Never blast identical messages** to >10 contacts simultaneously.
-2. **Never send unsolicited cold links** (links trigger high-risk spam filters if the recipient hasn't saved your number).
+1. **Never contact recipients without documented opt-in**, regardless of volume or message variation.
+2. **Never ignore opt-out requests** or send unsolicited messages or links.
 3. **Never reuse the customer support / AI reception chip** for bulk outbound marketing. Separate customer support from marketing.
-4. **If mass outbound (>300/day) is required**, migrate to **Meta Cloud API (Official)** to eliminate infrastructure ban risks permanently.
+4. **Use official WhatsApp interfaces where applicable** and comply with their terms and messaging limits. No gateway or volume guarantees immunity from restrictions.

@@ -24,3 +24,5 @@ if (readTest < 1200 || readTest > 4500) {
 }
 
 console.log("✅ All WhatsApp Anti-Ban tests passed cleanly!");
+
+await import('./test_workflow.mjs');
