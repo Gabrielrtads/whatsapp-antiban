@@ -5,6 +5,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "whatsapp-webhook",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
         "options": {}
       },
       "id": "1",
@@ -12,6 +14,31 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Only the documented flat gateway envelope is accepted. Discard everything else before side effects.\nreturn $input.all().flatMap((item, index) => {\n  const body = item.json.body;\n  if (!body || Array.isArray(body) || typeof body !== 'object' || body.data !== undefined || body.event !== 'messages.upsert') return [];\n  const key = body.key;\n  if (!key || key.fromMe !== false || typeof key.id !== 'string' || !key.id.trim() || key.id.length > 256) return [];\n  // Direct phone JIDs only: excludes groups, status, broadcasts and newsletters.\n  if (typeof key.remoteJid !== 'string' || key.remoteJid !== key.remoteJid.trim() || !/^[0-9]{5,15}@s\\.whatsapp\\.net$/.test(key.remoteJid)) return [];\n  const text = body.messageType === 'conversation' ? body.message?.conversation : body.messageType === 'extendedTextMessage' ? body.message?.extendedTextMessage?.text : undefined;\n  if (typeof text !== 'string' || !text.trim() || text.length > 65536) return [];\n  return [{ json: { body: { key: { id: key.id, fromMe: false, remoteJid: key.remoteJid }, message: { conversation: text } }, dedupe_key: JSON.stringify([key.remoteJid, key.id]) }, pairedItem: { item: index } }];\n});"
+      },
+      "id": "9",
+      "name": "Filter Inbound Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 80],
+      "notes": "Requires Webhook Header Auth. Accepts only flat messages.upsert text events with an explicit fromMe=false and a direct phone JID."
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $json.dedupe_key }}",
+        "options": { "historySize": 10000 }
+      },
+      "id": "10",
+      "name": "Deduplicate Messages",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [420, 80],
+      "notes": "Retains 10,000 recipient/message IDs across executions. Requires n8n >=1.64.0. Not an exactly-once delivery guarantee; validate persistence and concurrent redelivery on your deployment."
     },
     {
       "parameters": {
@@ -41,7 +68,7 @@
         "url": "http://your-gateway:8080/chat/markRead/your-instance",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"readMessages\": [\n    {\n      \"id\": \"{{ $('Webhook Inbound').item.json.body.key.id }}\",\n      \"fromMe\": false,\n      \"remoteJid\": \"{{ $('Webhook Inbound').item.json.body.key.remoteJid }}\"\n    }\n  ]\n}",
+        "jsonBody": "={{ JSON.stringify({ readMessages: [{ id: $('Filter Inbound Text').item.json.body.key.id, fromMe: false, remoteJid: $('Filter Inbound Text').item.json.body.key.remoteJid }] }) }}",
         "options": {}
       },
       "id": "4",
@@ -56,7 +83,7 @@
         "url": "http://your-gateway:8080/chat/sendPresence/your-instance",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $('Webhook Inbound').item.json.body.key.remoteJid }}\",\n  \"presence\": \"composing\"\n}",
+        "jsonBody": "={{ JSON.stringify({ number: $('Filter Inbound Text').item.json.body.key.remoteJid, presence: 'composing' }) }}",
         "options": {}
       },
       "id": "5",
@@ -93,7 +120,7 @@
         "url": "http://your-gateway:8080/message/sendText/your-instance",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $('Webhook Inbound').item.json.body.key.remoteJid }}\",\n  \"text\": \"{{ $json.reply_text }}\"\n}",
+        "jsonBody": "={{ JSON.stringify({ number: $('Filter Inbound Text').item.json.body.key.remoteJid, text: $json.reply_text }) }}",
         "options": {}
       },
       "id": "8",
@@ -105,6 +132,12 @@
   ],
   "connections": {
     "Webhook Inbound": {
+      "main": [[{ "node": "Filter Inbound Text", "type": "main", "index": 0 }]]
+    },
+    "Filter Inbound Text": {
+      "main": [[{ "node": "Deduplicate Messages", "type": "main", "index": 0 }]]
+    },
+    "Deduplicate Messages": {
       "main": [[{ "node": "Calculate Reading Delay", "type": "main", "index": 0 }]]
     },
     "Calculate Reading Delay": {
